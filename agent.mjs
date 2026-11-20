@@ -13,7 +13,6 @@ export const modelProfiles = {
 const enums = {
   audience: ['', 'client', 'advisor'],
   clientType: ['', 'Individual', 'Entity', 'Trust'],
-  mandate: ['', 'Discretionary', 'Self-directed'],
   incomeBasis: ['', 'monthly', 'annual', 'none', 'unspecified'],
   replacement: ['', 'yes', 'no'],
 };
@@ -24,11 +23,12 @@ const fields = {
   audience: 'Who should receive the introduction.',
   adviserName: 'Exact adviser name, if supplied.',
   clientType: 'Legal client type supported by the notes. Company maps to Entity.',
-  mandate: 'Mandate type, only if stated.',
+  mandateQuote: 'Exact mandate term if stated, e.g. Discretionary or self-directed. Leave blank if the notes only describe the investment strategy.',
   currencyQuote: 'Exact marker of the investment currency from the notes, such as ZAR, rand, USD, US dollars, GBP, £ or EUR. Use the investment currency even if the drawdown or other holdings use a different currency. A bare dollar sign is ambiguous.',
   model: 'One available model ID or empty. Use adviser direction and the supplied profiles. For an incompatible, unsupported or explicitly bespoke mandate leave empty. Flag a model fit restriction in limitations.',
   summary: 'Client-facing paragraph in plain text summarizing the background and goals. Omit financial numbers and durations, which the app displays separately. No HTML or markdown.',
   risk: 'Risk tolerance in plain text, based on what was said. Preserve uncertainty. Omit figures.',
+  riskQuote: 'Exact phrase about the client’s risk tolerance. Include both ends of a risk range and any limiting language. Omit if the risk was not discussed.',
   limitations: 'Stated portfolio constraints or instructions for the reviewer, especially when the selected model is only the closest fit.',
   amountQuote: 'Shortest exact substring for the investment amount, e.g. R6.2 million or four and a half million rand. An approximate stated number is fine; ranges and vague phrases like a few million are empty. Never quote a pension, an existing holding, or a potential offer as the investment amount.',
   incomeQuote: 'Exact substring for the income amount, or the full short phrase explicitly saying no income is needed. Exclude the period from numeric quotes. A missing income figure never means zero.',
@@ -178,13 +178,43 @@ function hasMonthlyPeriod(source, amount) {
 }
 
 function supportedHorizon(source) {
-  const period = source.match(/^(?:(?:at least|about|around|over|more than|up to) )?(.+?)[ -](?:years?|yrs?|months?|mos?)(?:\s*(?:\+|plus|or more))?$/i);
-  if (!period) return '';
-  const quantity = period[1].replace(/\+$/, '');
-  if (Number(normalizedNumber(quantity)) > 0) return source;
-  const range = quantity.split(/\s*(?:[–—-]|\bto\b)\s*/);
-  const [lower, upper] = range.map((part) => Number(normalizedNumber(part)));
-  return range.length === 2 && lower > 0 && upper >= lower ? source : '';
+  const period = source.match(/^(?:(at least|about|around|over|more than|up to) )?(.+?)[ -](years?|yrs?|months?|mos?)(?:\s*(?:\+|plus|or more))?$/i);
+  if (!period) return {};
+  const [, qualifier, amount, unit] = period;
+  const quantity = amount.replace(/\+$/, '');
+  let minimum = Number(normalizedNumber(quantity));
+  if (!(minimum > 0)) {
+    const range = quantity.split(/\s*(?:[–—-]|\bto\b)\s*/);
+    const [lower, upper] = range.map((part) => Number(normalizedNumber(part)));
+    if (range.length !== 2 || !(lower > 0 && upper >= lower)) return {};
+    minimum = lower;
+  }
+  const months = unit.toLowerCase().startsWith('y') ? minimum * 12 : minimum;
+  const categories = [[60, '5 years+'], [36, '3 years+'], [12, '1 year+']];
+  const category = qualifier?.toLowerCase() === 'up to' ? undefined : categories.find(([floor]) => months >= floor)?.[1];
+  return { exact: source, category };
+}
+
+function riskCategoryOf(source) {
+  const description = source.toLowerCase().replace(/[-–—]/g, ' ').replace(/\s+/g, ' ');
+  const agreedLabels = {
+    conservative: 'Conservative',
+    'moderately conservative': 'Moderately Conservative',
+    'conservative to moderate': 'Moderately Conservative',
+    moderate: 'Moderate',
+    'moderately aggressive': 'Moderately Aggressive',
+    'moderate to aggressive': 'Moderately Aggressive',
+    aggressive: 'Aggressive',
+  };
+  if (Object.hasOwn(agreedLabels, description)) return agreedLabels[description];
+  if (/\bcapital preservation\b/.test(description) && /\b(?:needs?|wants?) some growth\b/.test(description)) {
+    return 'Moderately Conservative';
+  }
+  return '';
+}
+
+function isGeneralBenchmark(benchmark) {
+  return /^(?:an? |the )?(?:(?:global|domestic|local|offshore|international|broad market) )?(?:(?:equity|bond|market|stock|fixed income) )?(?:index|benchmark)$/i.test(benchmark);
 }
 
 function targetReturn(source) {
@@ -223,6 +253,8 @@ export function buildProposal(extraction, notes, models) {
   }
   const evidence = {};
   const review = [];
+  const draftChoices = {};
+  const defaults = ['The editor can supply practice text, contacts and fee defaults. Check these in the draft.'];
   const sourceText = notes.replace(/\s+/g, ' ');
   function quote(field, numeric = false, validContext = () => true) {
     const value = x[field];
@@ -289,8 +321,14 @@ export function buildProposal(extraction, notes, models) {
     if (incomeSource) evidence['Income detail to review'] = [incomeSource, period].filter(Boolean).join(' · ');
   }
 
-  const horizon = supportedHorizon(quote('horizonQuote'));
-  if (horizon) evidence['Investment horizon'] = horizon;
+  const horizon = supportedHorizon(quote('horizonQuote', false, (_, preceding, following) =>
+    !/\b(?:not|instead of|up to|between)[^.!?]{0,16}\s$/i.test(preceding)
+    && !/^\s*(?:\+|plus\b|or more\b)/i.test(following)));
+  if (horizon.exact) {
+    evidence['Investment horizon'] = horizon.exact;
+    if (horizon.category) draftChoices['Editor horizon'] = horizon.category;
+    else review.push('Confirm the recommended horizon. The stated duration does not establish a listed minimum.');
+  }
   else review.push('Confirm the investment horizon.');
   const fee = numeric(quote('feeQuote', true, annualFeeContext), 'Adviser fee', 0, 100);
   if (!fee) review.push('Confirm the annual adviser fee and check for any practice default.');
@@ -300,7 +338,11 @@ export function buildProposal(extraction, notes, models) {
   else if (x.targetQuote) review.push('Confirm the target return.');
   const suggestedModel = models.find(({ id }) => id === x.model);
   const model = suggestedModel && !conflictingCurrencies && (!currency || currency === suggestedModel.currency) ? suggestedModel : null;
-  if (model) review.push(`Review the portfolio fit and model presets for ${model.portfolioName}.`);
+  if (model) {
+    draftChoices['Draft model'] = model.portfolioName;
+    defaults.unshift('The portfolio preset supplies allocation, composition, model descriptions and portfolio fees.');
+    review.push(`Review the portfolio fit and model presets for ${model.portfolioName}.`);
+  }
   else if (suggestedModel && currency) review.push(`Confirm the portfolio. ${suggestedModel.portfolioName} uses ${suggestedModel.currency}, while the notes specify ${currency}.`);
   else review.push('Confirm the portfolio selection or enter a custom allocation in the editor.');
   const statedName = cleanText(x.clientName);
@@ -313,22 +355,42 @@ export function buildProposal(extraction, notes, models) {
       && tokens.slice(start + 2, start + 5).includes(jointName[2]);
   }) ? statedName : '');
   if (!clientName) review.push('Confirm the client name.');
+  const riskSource = quote('riskQuote', false, (_, preceding, following) =>
+    !/\b(?:not|never|avoid|too)(?: [\p{L}’-]+){0,3} $/iu.test(preceding)
+    && !/\b(?:moderately |(?:conservative|moderate)[ -]+to[ -]+)$/i.test(preceding)
+    && !/^[ -]+to[ -]+(?:moderate|aggressive)\b/i.test(following));
+  const riskCategory = riskCategoryOf(riskSource);
+  if (riskSource) evidence['Risk description'] = riskSource;
+  if (riskCategory) draftChoices['Editor risk category'] = riskCategory;
+  else review.push('Confirm the client’s risk category.');
   const risk = draftText('risk');
   const limitations = draftText('limitations');
   if (limitations) review.push(limitations);
-  const goalAssessment = { investmentHorizon: horizon, riskTolerance: risk };
+  const goalAssessment = { investmentHorizon: horizon.exact ?? '', riskTolerance: risk };
   const objective = {
-    investmentHorizon: horizon, targetReturn: target, targetReturnKey: target ? '__custom__' : '',
-    riskProfile: risk, riskProfileCategory: '',
+    targetReturn: target, targetReturnKey: target ? '__custom__' : '', riskProfile: risk,
   };
+  optional(objective, 'investmentHorizon', horizon.category);
+  optional(objective, 'riskProfileCategory', riskCategory);
   optional(goalAssessment, 'clientType', x.clientType);
-  optional(goalAssessment, 'mandateType', x.mandate);
+  const mandateSource = quote('mandateQuote', false, (_, preceding) =>
+    !/\b(?:not|possibly|maybe) $/i.test(preceding));
+  const mandate = ['Discretionary', 'Self-directed'].find((type) => type.toLowerCase() === mandateSource.toLowerCase());
+  if (mandate) {
+    goalAssessment.mandateType = mandate;
+    evidence['Mandate type'] = mandateSource;
+  } else {
+    review.push('Confirm the mandate type.');
+  }
   optional(goalAssessment, 'currency', currency);
   optional(goalAssessment, 'limitations', limitations);
   const benchmark = quote('benchmark');
-  if (benchmark) objective.benchmark = benchmark;
-  else if (x.benchmark) {
-    objective.benchmark = '';
+  objective.benchmark = '';
+  if (benchmark) {
+    evidence['Benchmark'] = benchmark;
+    if (isGeneralBenchmark(benchmark)) review.push(`Which specific benchmark should be used for the stated “${benchmark}”?`);
+    else objective.benchmark = benchmark;
+  } else if (x.benchmark) {
     review.push('Confirm the benchmark.');
   }
   const strategy = { keyFigures: {} };
@@ -353,7 +415,7 @@ export function buildProposal(extraction, notes, models) {
     optional(proposal.replacements, 'details', draftText('replacementDetails'));
   }
   validateProposal(proposal);
-  return { proposal, evidence, review };
+  return { proposal, evidence, review, draftChoices, defaults };
 
   function draftText(field) {
     if (!/\d/.test(x[field])) return cleanText(x[field]);

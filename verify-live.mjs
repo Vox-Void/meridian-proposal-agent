@@ -30,6 +30,7 @@ try {
   assert.deepEqual(proposal.strategy.keyFigures, { totalInvestment: '2500000', incomeValue: '0' });
   assert.equal(proposal.goalAssessment.currency, 'ZAR');
   assert.equal(proposal.goalAssessment.investmentHorizon, '8 years');
+  assert.equal(proposal.objective.investmentHorizon, '5 years+');
   assert.equal(proposal.fees.advisorFee, '0.65');
   console.log(`Live extraction passed with ${result.source}.`);
 } catch (error) {

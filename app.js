@@ -76,23 +76,34 @@ element('open-editor').addEventListener('click', (event) => {
   event.currentTarget.setAttribute('aria-expanded', String(expanded));
 });
 
-function renderResult({ review, evidence, proposal, source }) {
-  element('review-heading').textContent = proposal.clientName
-    ? `Adviser review · ${proposal.clientName}`
-    : 'Adviser review';
-  element('review').replaceChildren(...review.map((item) => {
+function listItems(items) {
+  return items.map((item) => {
     const line = document.createElement('li');
     line.textContent = item;
     return line;
-  }));
-  element('evidence').replaceChildren(...Object.entries(evidence).flatMap(([label, excerpt]) => {
+  });
+}
+
+function renderDetails(panel, list, entries) {
+  const terms = Object.entries(entries);
+  element(list).replaceChildren(...terms.flatMap(([label, excerpt]) => {
     const term = document.createElement('dt');
     term.textContent = label;
     const description = document.createElement('dd');
     description.textContent = excerpt;
     return [term, description];
   }));
-  element('evidence-panel').hidden = !Object.keys(evidence).length;
+  element(panel).hidden = !terms.length;
+}
+
+function renderResult({ review, evidence, draftChoices, defaults, proposal, source }) {
+  element('review-heading').textContent = proposal.clientName
+    ? `Adviser review · ${proposal.clientName}`
+    : 'Adviser review';
+  element('review').replaceChildren(...listItems(review));
+  element('defaults').replaceChildren(...listItems(defaults));
+  renderDetails('evidence-panel', 'evidence', evidence);
+  renderDetails('choices-panel', 'draft-choices', draftChoices);
   element('proposal-json').textContent = JSON.stringify(proposal, null, 2);
   element('result').hidden = false;
   element('editor-placeholder').hidden = true;
@@ -116,7 +127,12 @@ form.addEventListener('submit', async (event) => {
       body: JSON.stringify({ mode: mode.value, sampleId: samples.value, notes: notes.value, modelIds }),
     });
     editor.hidden = false;
-    editor.contentWindow.loadProposal(result.proposal);
+    // Omit unset enums in the API contract, but explicitly clear the vendor editor's presets.
+    const proposal = result.proposal;
+    editor.contentWindow.loadProposal({
+      ...proposal,
+      objective: { investmentHorizon: '', riskProfileCategory: '', ...proposal.objective },
+    });
     renderResult(result);
   } catch (error) {
     if (element('result').hidden) editor.hidden = true;

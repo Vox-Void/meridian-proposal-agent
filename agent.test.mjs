@@ -10,27 +10,36 @@ const models = Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...pr
 
 test('all provided samples carry the expected client, model, currency and grounded figures', () => {
   for (const [index, { extraction, notes }] of demos.entries()) {
-    const { proposal, review } = buildProposal(extraction, notes, models);
+    const { proposal, evidence, draftChoices, defaults, review } = buildProposal(extraction, notes, models);
     const fixture = new URL(`./sample-inputs/0${index + 1}-expected.json`, import.meta.url);
     const expected = JSON.parse(readFileSync(fixture, 'utf8'));
     assert.equal(proposal.clientName, expected.clientName);
     assert.equal(proposal.applyModel, expected.applyModel);
     assert.equal(proposal.goalAssessment.currency, expected.goalAssessment.currency);
-    assert.equal(proposal.strategy.keyFigures.totalInvestment, expected.goalAssessment.keyFigures?.totalInvestment);
-    if (expected.goalAssessment.keyFigures?.incomeValue) {
-      assert.equal(proposal.strategy.keyFigures.incomeValue, expected.goalAssessment.keyFigures.incomeValue);
+    assert.equal(proposal.strategy.keyFigures.totalInvestment, expected.strategy?.keyFigures?.totalInvestment);
+    if (expected.strategy?.keyFigures?.incomeValue) {
+      assert.equal(proposal.strategy.keyFigures.incomeValue, expected.strategy.keyFigures.incomeValue);
     }
+    assert.equal(proposal.objective.investmentHorizon, expected.objective.investmentHorizon);
+    assert.equal(proposal.objective.riskProfileCategory, expected.objective.riskProfileCategory);
+    assert.equal(draftChoices['Editor horizon'], expected.objective.investmentHorizon);
+    assert.equal(draftChoices['Editor risk category'], expected.objective.riskProfileCategory);
+    assert.equal(draftChoices['Draft model'], modelProfiles[expected.applyModel].portfolioName);
+    assert.match(defaults[0], /allocation, composition/);
     assert.equal(proposal.fees?.advisorFee, expected.fees?.advisorFee);
     assert.equal(proposal.status, 'draft');
     if (index === 1) {
       assert.equal(proposal.financialPlanner, 'Marcus Reid');
       assert.equal(proposal.introGreetTo, 'advisor');
       assert.equal(proposal.replacements.isReplacement, true);
-      assert.equal(proposal.objective.benchmark, 'global equity index');
+      assert.equal(proposal.objective.benchmark, '');
+      assert.equal(evidence.Benchmark, 'global equity index');
+      assert.equal(proposal.goalAssessment.mandateType, undefined);
+      assert.match(review.join(' '), /Confirm the mandate type.*specific benchmark/);
       assert.equal(proposal.strategy.keyFigures.incomeValue, '0');
     }
     if (index === 2) {
-      assert.equal(proposal.objective.investmentHorizon, '');
+      assert.equal(proposal.objective.investmentHorizon, undefined);
       assert.equal(proposal.goalAssessment.investmentHorizon, '');
       assert.equal(proposal.objective.targetReturn, '');
       assert.ok(review.some((item) => item.includes('investment amount')));
@@ -51,7 +60,7 @@ test('drops unsupported quotes, vague amounts and annual income from monthly fie
     incomeBasis: 'monthly', incomePeriodQuote: 'monthly statements', horizonQuote: '10 years', feeQuote: '0.7%',
   }, notes, models);
   assert.deepEqual(proposal.strategy.keyFigures, {});
-  assert.equal(proposal.objective.investmentHorizon, '');
+  assert.equal(proposal.objective.investmentHorizon, undefined);
   assert.equal(proposal.fees, undefined);
   assert.ok(review.some((item) => item.includes('monthly drawdown')));
 });
@@ -102,6 +111,7 @@ test('accepts an attached monthly amount, explicit range horizon and zero advise
   }, notes, models);
   assert.deepEqual(proposal.strategy.keyFigures, { totalInvestment: '60000', incomeValue: '400' });
   assert.equal(proposal.goalAssessment.investmentHorizon, '8 to 10 years');
+  assert.equal(proposal.objective.investmentHorizon, '5 years+');
   assert.equal(proposal.fees.advisorFee, '0');
 });
 
@@ -112,11 +122,35 @@ test('omits an ambiguous currency, a qualitative horizon and unsupported narrati
     summary: 'The client requires 10% a year.',
   }, notes, models);
   assert.deepEqual(proposal.strategy, { keyFigures: {} });
-  assert.equal(proposal.objective.investmentHorizon, '');
+  assert.equal(proposal.objective.investmentHorizon, undefined);
   assert.equal(proposal.objective.targetReturn, '');
   assert.equal(proposal.objective.benchmark, '');
   assert.equal(proposal.introduction, undefined);
   assert.match(review.join(' '), /currency.*horizon.*target return.*benchmark.*client summary/);
+});
+
+test('maps the lower bound of a horizon range and treats an upper bound as unresolved', () => {
+  for (const [horizonQuote, category] of [
+    ['18 months', '1 year+'], ['3 to 6 years', '3 years+'], ['six months', undefined],
+    ['up to 5 years', undefined],
+  ]) {
+    const { proposal } = buildProposal({ horizonQuote }, `The time horizon is ${horizonQuote}.`, models);
+    assert.equal(proposal.goalAssessment.investmentHorizon, horizonQuote);
+    assert.equal(proposal.objective.investmentHorizon, category);
+  }
+  const upperBound = buildProposal({ horizonQuote: '5 years' }, 'The horizon is up to 5 years.', models);
+  assert.equal(upperBound.proposal.objective.investmentHorizon, undefined);
+});
+
+test('keeps uncertain risk categories and mandates open, while retaining a quoted named benchmark', () => {
+  const notes = 'They do not want an aggressive portfolio. Maybe Discretionary. Benchmark against the MSCI World Index.';
+  const { proposal, review } = buildProposal({
+    riskQuote: 'aggressive', mandateQuote: 'Discretionary', benchmark: 'MSCI World Index',
+  }, notes, models);
+  assert.equal(proposal.objective.riskProfileCategory, undefined);
+  assert.equal(proposal.goalAssessment.mandateType, undefined);
+  assert.equal(proposal.objective.benchmark, 'MSCI World Index');
+  assert.match(review.join(' '), /risk category.*mandate type/);
 });
 
 test('does not label basis-point, monthly or one-off charges as the annual adviser fee', () => {

@@ -6,13 +6,17 @@
   "goalAssessment": {
     "clientType": "Individual",
     "mandateType": "Discretionary",
-    "currency": "ZAR",
+    "currency": "ZAR"
+  },
+  "strategy": {
     "keyFigures": {
       "totalInvestment": "6200000",
       "incomeValue": "28000"
     }
   },
   "objective": {
+    "riskProfileCategory": "Moderately Conservative",
+    "investmentHorizon": "5 years+",
     "riskProfile": "Conservative to moderate. Capital preservation is the priority, with sufficient growth to protect the real value of capital over the long term. The portfolio must be able to fund a regular monthly income without forcing the sale of growth assets during market drawdowns."
   },
   "fees": {
