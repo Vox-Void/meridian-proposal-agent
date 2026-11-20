@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meridian Proposal Agent</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="mark" aria-hidden="true">M</span>
+      <h1>Meridian <span>Proposal Agent</span></h1>
+    </div>
+    <span id="mode-chip" class="mode-chip" hidden></span>
+  </header>
+  <main>
+    <section class="workspace" aria-labelledby="notes-heading">
+      <h2 id="notes-heading">Adviser notes</h2>
+      <form id="draft-form">
+        <div class="inputs">
+          <div>
+            <label for="mode">Extraction mode</label>
+            <select id="mode" disabled>
+              <option value="sample">Offline sample replay</option>
+              <option value="live" disabled>Live · Claude</option>
+            </select>
+          </div>
+          <div>
+            <label for="sample">Sample notes</label>
+            <select id="sample" disabled><option value="">Choose a sample</option></select>
+          </div>
+        </div>
+        <label class="sr-only" for="notes">Adviser notes</label>
+        <textarea id="notes" maxlength="12000" rows="10" required placeholder="Choose a sample to load the adviser notes." readonly></textarea>
+        <p class="hint" id="mode-help"></p>
+        <button id="generate" type="submit" disabled>Generate draft</button>
+        <p id="status" role="status"></p>
+        <p id="error" role="alert" hidden></p>
+      </form>
+      <section id="result" hidden aria-labelledby="review-heading">
+        <h3 id="review-heading">Adviser review</h3>
+        <ul id="review"></ul>
+        <details id="evidence-panel" hidden>
+          <summary>Source excerpts</summary>
+          <dl id="evidence"></dl>
+        </details>
+        <details>
+          <summary>Proposal JSON</summary>
+          <pre id="proposal-json"></pre>
+        </details>
+      </section>
+    </section>
+    <section class="viewer" aria-labelledby="editor-heading">
+      <div class="viewer-heading">
+        <h2 id="editor-heading">Proposal editor</h2>
+        <span id="editor-state">Awaiting a draft</span>
+        <button id="open-editor" type="button" aria-expanded="false" hidden>Expand editor</button>
+      </div>
+      <div id="editor-placeholder">
+        <div><strong>No draft open</strong><p>Generate a draft from adviser notes to start reviewing it here.</p></div>
+      </div>
+      <iframe id="editor" title="Meridian proposal editor" src="/challenge-generator.html" hidden></iframe>
+    </section>
+  </main>
+</body>
+</html>

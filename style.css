@@ -1,0 +1,131 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #1d2c3c;
+  background: #f3f5f8;
+  --line: #d9e1e9;
+  --muted: #506275;
+  --blue: #174979;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+header {
+  min-height: 68px;
+  padding: 12px 28px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 7px;
+  background: #163854;
+  color: #fff;
+  font: bold 21px Georgia, serif;
+}
+h1 { margin: 0; font-size: 19px; font-weight: 700; }
+h1 span { margin-inline-start: 5px; color: var(--muted); font-weight: 450; }
+.mode-chip {
+  color: #21593f;
+  background: #e7f2eb;
+  padding: 5px 11px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 650;
+}
+main {
+  display: grid;
+  grid-template-columns: minmax(350px, 400px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  padding: 20px 28px;
+}
+.workspace, .viewer { background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.workspace { padding: 21px; }
+h2 { margin: 0 0 16px; font-size: 18px; }
+h3 { margin: 0 0 10px; font-size: 15px; }
+.inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+label { display: block; font-size: 12px; font-weight: 650; margin-bottom: 5px; }
+select, textarea, button { font: inherit; }
+select, textarea {
+  width: 100%;
+  border: 1px solid #b9c8d7;
+  color: inherit;
+  background: #f9fbfd;
+  border-radius: 6px;
+}
+select { font-size: 13px; padding: 8px 6px; }
+textarea { padding: 11px; resize: vertical; font-size: 13px; line-height: 1.5; min-height: 150px; }
+.hint, #status, #error { margin: 8px 0 12px; color: var(--muted); font-size: 13px; }
+#status:empty { display: none; }
+#error { color: #9a2526; }
+button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 9px 13px;
+  background: var(--blue);
+  color: white;
+  font-weight: 650;
+  font-size: 13px;
+  cursor: pointer;
+}
+button:disabled { opacity: .55; cursor: default; }
+button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 2px solid #2f6aa3;
+  outline-offset: 2px;
+}
+#result { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+#review { margin: 0 0 12px; padding-inline-start: 19px; color: #37485a; font-size: 13px; line-height: 1.5; }
+#review li + li { margin-top: 5px; }
+details { border-top: 1px solid var(--line); padding: 9px 0; font-size: 13px; }
+summary { color: var(--blue); font-weight: 600; cursor: pointer; }
+dl { margin-bottom: 0; }
+dt { font-weight: 650; margin-top: 8px; }
+dd { margin: 2px 0 0; color: var(--muted); }
+pre { overflow: auto; max-height: 270px; padding: 8px; background: #f3f5f8; }
+.viewer { overflow: hidden; }
+main.editor-expanded { grid-template-columns: minmax(0, 1fr); }
+main.editor-expanded .workspace { display: none; }
+.viewer-heading {
+  min-height: 53px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.viewer-heading h2 { margin: 0 auto 0 0; }
+#editor-state { font-size: 12px; color: var(--muted); }
+#open-editor { background: #edf3f9; color: var(--blue); white-space: nowrap; }
+#editor-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+}
+#editor-placeholder strong { color: #1d2c3c; }
+#editor-placeholder p { margin: 7px 0 0; font-size: 14px; }
+iframe { display: block; width: 100%; height: max(670px, calc(100dvh - 163px)); border: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+@media (max-width: 1000px) {
+  main { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+  header { padding-inline: 14px; }
+}
+@media (max-width: 460px) {
+  .inputs { grid-template-columns: 1fr; }
+  h1 span { display: block; margin: 0; }
+  .workspace { padding: 15px; }
+}
