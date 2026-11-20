@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { buildProposal, extractWithClaude, modelProfiles, normalizedNumber } from './agent.mjs';
+import { buildProposal, extractWithOpenAI, modelProfiles, normalizedNumber } from './agent.mjs';
 import { demos } from './demo.mjs';
 import { makeServer } from './server.mjs';
 
@@ -67,28 +67,45 @@ test('rejects partial investment amounts and endpoints of a range', () => {
   }
 });
 
-test('Claude adapter sends the current model list and consumes the structured response', async (context) => {
-  const previous = process.env.ANTHROPIC_API_KEY;
-  process.env.ANTHROPIC_API_KEY = 'test-key';
+test('OpenAI adapter sends the current model list and consumes the structured response', async (context) => {
+  const previous = { key: process.env.OPENAI_API_KEY, model: process.env.MERIDIAN_MODEL };
+  process.env.OPENAI_API_KEY = 'test-key';
+  delete process.env.MERIDIAN_MODEL;
   context.after(() => {
-    if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = previous;
+    if (previous.key === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous.key;
+    if (previous.model !== undefined) process.env.MERIDIAN_MODEL = previous.model;
   });
   const fixture = demos[0];
-  const simulated = { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(fixture.extraction) }] };
+  const simulated = {
+    status: 'completed', model: 'gpt-6.2-sol',
+    output: [
+      { type: 'reasoning', summary: [] },
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify(fixture.extraction) }] },
+    ],
+  };
   const provider = context.mock.method(globalThis, 'fetch', async (url, options) => {
-    assert.equal(url, 'https://api.anthropic.com/v1/messages');
-    assert.equal(options.headers['x-api-key'], 'test-key');
+    assert.equal(url, 'https://api.openai.com/v1/responses');
+    assert.equal(options.headers.authorization, 'Bearer test-key');
     const body = JSON.parse(options.body);
-    assert.equal(JSON.parse(body.messages[0].content).adviserNotes, fixture.notes);
-    const format = body.output_config.format;
+    assert.equal(body.model, 'gpt-6.2-sol');
+    assert.equal(body.store, false);
+    assert.equal(body.input[0].role, 'developer');
+    assert.equal(JSON.parse(body.input[1].content).adviserNotes, fixture.notes);
+    const format = body.text.format;
     assert.equal(format.type, 'json_schema');
+    assert.equal(format.strict, true);
     assert.equal(format.schema.additionalProperties, false);
     assert.deepEqual(format.schema.properties.model.enum, ['', 'balanced', 'global-growth', 'income']);
     return new Response(JSON.stringify(simulated));
   });
-  assert.deepEqual((await extractWithClaude(fixture.notes, models)).extraction, fixture.extraction);
+  assert.deepEqual(await extractWithOpenAI(fixture.notes, models), { extraction: fixture.extraction, model: simulated.model });
   assert.equal(provider.mock.callCount(), 1);
+  simulated.status = 'incomplete';
+  await assert.rejects(extractWithOpenAI(fixture.notes, models), /complete draft/);
+  simulated.status = 'completed';
+  simulated.output[1].content = [{ type: 'refusal', refusal: 'Simulated refusal' }];
+  await assert.rejects(extractWithOpenAI(fixture.notes, models), /declined/);
 });
 
 test('HTTP workflow accepts new notes in live mode and rejects a modified offline sample', async (context) => {

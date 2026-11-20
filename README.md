@@ -1,6 +1,6 @@
 # Meridian Proposal Agent
 
-Turn fictional adviser notes into an editable investment proposal. The app extracts details with Claude, checks the figures against source excerpts, and opens a draft in the supplied Meridian generator through `window.loadProposal(proposal)`.
+Turn fictional adviser notes into an editable investment proposal. The app extracts details with GPT-6.2 Sol, checks the figures against source excerpts, and opens a draft in the supplied Meridian generator through `window.loadProposal(proposal)`.
 
 ## Run locally
 
@@ -14,9 +14,13 @@ Open `http://127.0.0.1:8765`. In **Offline sample replay**, choose one of the fo
 
 ### Live extraction
 
-Set `ANTHROPIC_API_KEY` in your local environment, then start or restart the server. The app opens in **Live · Claude** when the key is present. Paste fictional notes or select a sample, then generate a draft. Live extraction sends the notes to Anthropic. The API key stays on the server.
+Create an API key in the [OpenAI API Platform](https://platform.openai.com/api-keys) and set `OPENAI_API_KEY` in your local environment, then start or restart the server. Your ChatGPT or Codex sign-in does not set this variable for the standalone app. The API key stays on the server.
 
-The default model is `claude-sonnet-4-6` through the Claude Messages API. The optional `MERIDIAN_MODEL` environment variable accepts another Claude model that supports structured outputs. The server uses loopback only, and `PORT` can override the default port.
+The app opens in **Live · OpenAI** when the key is present. Paste fictional notes or select a sample, then generate a draft. Live extraction sends the notes to the OpenAI Responses API.
+
+The default model is `gpt-6.2-sol`. The optional `MERIDIAN_MODEL` environment variable accepts another Responses API model that supports Structured Outputs and low reasoning effort. The server uses loopback only, and `PORT` can override the default port.
+
+To use a local environment file, create an untracked `.env` beside `server.mjs`, add `OPENAI_API_KEY=your_key_here`, and start the server with `node --env-file=.env server.mjs`. Keep the key out of Git and screenshots.
 
 ### Windows without a separate Node install
 
@@ -30,7 +34,7 @@ $env:ELECTRON_RUN_AS_NODE = '1'
 ## How it works
 
 1. The browser reads the allowed model IDs from the generator. The server limits selection to the three portfolio profiles described in the challenge.
-2. Claude returns a structured extraction containing facts, exact excerpts for key figures, and a draft model choice. The app checks that the excerpts occur in the notes and normalizes supported money and fee formats. An annual or unspecified drawdown goes to the review list because the generator's amount field is monthly.
+2. GPT-6.2 Sol returns a structured extraction containing facts, exact excerpts for key figures, and a draft model choice. The app checks that the excerpts occur in the notes and normalizes supported money and fee formats. An annual or unspecified drawdown goes to the review list because the generator's amount field is monthly.
 3. The server maps the extraction to the proposal contract and checks the fields it emits against the supplied JSON schema. It writes key figures into `strategy.keyFigures`, which the editor reads. It writes the confirmed horizon into both renderer fields and clears client horizon and target return when they are absent, even if the model has defaults.
 4. The generator opens the editable draft. The app shows the fields that need confirmation, the source excerpts and the exact proposal JSON. Model allocation, composition and portfolio fees come from the supplied catalog. The adviser reviews model fit and any inherited defaults before using a draft.
 
@@ -42,7 +46,7 @@ The extraction handles the core adviser-note fields. A bespoke allocation can be
 node --test agent.test.mjs
 ```
 
-The tests cover the supplied cases, field mapping, missing and ungrounded figures, annual drawdown handling, the Claude request and response shape with a simulated provider, and the local HTTP API. See [the demo screenshots](demo/) for the offline sample flow in the actual generator.
+The tests cover the supplied cases, field mapping, missing and ungrounded figures, annual drawdown handling, the OpenAI request and response shape with a simulated provider, and the local HTTP API. See [the demo screenshots](demo/) for the offline sample flow in the actual generator.
 
 ## With more time
 

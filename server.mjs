@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { buildProposal, extractWithClaude, modelProfiles } from './agent.mjs';
+import { buildProposal, extractWithOpenAI, modelProfiles } from './agent.mjs';
 import { demos } from './demo.mjs';
 
 const files = new Map([
@@ -14,7 +14,7 @@ const files = new Map([
   type: `${type}; charset=utf-8`,
 }]));
 const maxBody = 160_000;
-const live = Boolean(process.env.ANTHROPIC_API_KEY);
+const live = Boolean(process.env.OPENAI_API_KEY?.trim());
 
 function json(response, status, body) {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -36,7 +36,7 @@ async function readRequest(request) {
   }
 }
 
-export function makeServer({ extract = extractWithClaude } = {}) {
+export function makeServer({ extract = extractWithOpenAI } = {}) {
   return createServer(async (request, response) => {
     const origin = `http://127.0.0.1:${response.socket.localPort}`;
     if (request.headers.host !== new URL(origin).host) {

@@ -29,13 +29,13 @@ function updateForm() {
   samples.disabled = busy || !config;
   generate.disabled = busy || !editorReady || !config || !notes.value.trim() || (!live && !samples.value);
   const chip = element('mode-chip');
-  chip.textContent = live ? 'Live · Claude' : 'Offline sample replay';
+  chip.textContent = live ? 'Live · OpenAI' : 'Offline sample replay';
   chip.hidden = !config;
   element('mode-help').textContent = live
-    ? 'Use fictional notes. Live extraction sends the notes to Claude.'
+    ? 'Use fictional notes. Live extraction sends the notes to OpenAI.'
     : config?.live
       ? 'Offline replay uses recorded sample extractions.'
-      : 'Offline replay uses recorded samples. Set ANTHROPIC_API_KEY on the server for custom notes.';
+      : 'Offline replay uses recorded samples. Set OPENAI_API_KEY on the server for custom notes.';
   notes.placeholder = live ? 'Paste fictional adviser notes here.' : 'Choose a sample to load the adviser notes.';
 }
 
