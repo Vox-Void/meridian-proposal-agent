@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { buildProposal, extractWithOpenAI, modelProfiles } from './agent.mjs';
+import { buildProposal, extractWithOpenAI, modelProfiles, ProviderError } from './agent.mjs';
 import { demos } from './demo.mjs';
 
 const files = new Map([
@@ -14,32 +14,39 @@ const files = new Map([
   type: `${type}; charset=utf-8`,
 }]));
 const maxBody = 160_000;
-const live = Boolean(process.env.OPENAI_API_KEY?.trim());
+const maxNotes = 12_000;
+const catalog = Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...profile }));
+const samples = demos.map(({ id, label, notes }) => ({ id, label, notes }));
 
-function json(response, status, body) {
-  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+function json(response, status, body, headers = {}) {
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff', ...headers,
+  });
   response.end(JSON.stringify(body));
 }
 
 async function readRequest(request) {
   const chunks = [];
   let size = 0;
-  for await (const chunk of request) {
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
     size += chunk.length;
-    if (size > maxBody) return null;
+    if (size > maxBody) return { tooLarge: true };
     chunks.push(chunk);
   }
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return { input: JSON.parse(Buffer.concat(chunks).toString('utf8')) };
   } catch {
-    return null;
+    return {};
   }
 }
 
 export function makeServer({ extract = extractWithOpenAI } = {}) {
+  const live = extract !== extractWithOpenAI || Boolean(process.env.OPENAI_API_KEY?.trim());
   return createServer(async (request, response) => {
-    const origin = `http://127.0.0.1:${response.socket.localPort}`;
-    if (request.headers.host !== new URL(origin).host) {
+    const host = `127.0.0.1:${request.socket.localPort}`;
+    const origin = `http://${host}`;
+    if (request.headers.host !== host) {
       return json(response, 403, { error: 'Open the app using its loopback address.' });
     }
     if (request.method === 'GET' && files.has(request.url)) {
@@ -48,25 +55,33 @@ export function makeServer({ extract = extractWithOpenAI } = {}) {
       return response.end(body);
     }
     if (request.method === 'GET' && request.url === '/api/config') {
-      return json(response, 200, { live, samples: demos.map(({ id, label, notes }) => ({ id, label, notes })) });
+      return json(response, 200, { live, samples });
     }
     if (request.method !== 'POST' || request.url !== '/api/proposal') {
       return json(response, 404, { error: 'Route not found.' });
     }
-    if (request.headers.origin !== origin || !request.headers['content-type']?.startsWith('application/json')) {
+    if (request.headers.origin !== origin) {
       return json(response, 403, { error: 'Generate drafts from the local app.' });
     }
-    const input = await readRequest(request);
-    const notes = typeof input?.notes === 'string' ? input.notes.replace(/\r\n/g, '\n').trim() : '';
-    if (!notes || notes.length > 12_000 || !Array.isArray(input?.modelIds) || !['sample', 'live'].includes(input?.mode)) {
-      return json(response, 400, { error: 'Enter between 1 and 12,000 characters of adviser notes.' });
+    if (request.headers['content-type']?.split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
+      return json(response, 415, { error: 'Send the proposal request as JSON.' });
     }
-    const models = Object.entries(modelProfiles)
-      .filter(([id]) => input.modelIds.includes(id))
-      .map(([id, profile]) => ({ id, profile, portfolioName: {
-        balanced: 'Meridian Balanced Portfolio', 'global-growth': 'Meridian Global Growth Portfolio', income: 'Meridian Income Portfolio',
-      }[id] }));
     try {
+      const { input, tooLarge } = Number(request.headers['content-length']) > maxBody
+        ? { tooLarge: true }
+        : await readRequest(request);
+      if (tooLarge) {
+        return json(response, 413, { error: 'The proposal request is too large.' }, { connection: 'close' });
+      }
+      if (!input || !['sample', 'live'].includes(input.mode)
+        || !Array.isArray(input.modelIds) || input.modelIds.some((id) => typeof id !== 'string')) {
+        return json(response, 400, { error: 'Send a proposal request with an extraction mode and model IDs.' });
+      }
+      const notes = typeof input.notes === 'string' ? input.notes.replace(/\r\n/g, '\n').trim() : '';
+      if (!notes || notes.length > maxNotes) {
+        return json(response, 400, { error: 'Enter between 1 and 12,000 characters of adviser notes.' });
+      }
+      const models = catalog.filter(({ id }) => input.modelIds.includes(id));
       let result;
       if (input.mode === 'sample') {
         const sample = demos.find(({ id, notes: recorded }) => id === input.sampleId && recorded === notes);
@@ -80,7 +95,9 @@ export function makeServer({ extract = extractWithOpenAI } = {}) {
       }
       return json(response, 200, { ...buildProposal(result.extraction, notes, models), source: result.model });
     } catch (error) {
-      return json(response, 502, { error: error.message || 'Could not generate a draft.' });
+      if (response.destroyed) return;
+      if (error instanceof ProviderError) return json(response, error.status, { error: error.message });
+      return json(response, 500, { error: 'Could not generate a draft. Try again.' });
     }
   });
 }

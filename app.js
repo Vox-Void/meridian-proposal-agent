@@ -6,6 +6,7 @@ const notes = element('notes');
 const editor = element('editor');
 const generate = element('generate');
 const errorMessage = element('error');
+const inputsByMode = { sample: { id: '', notes: '' }, live: { id: '', notes: '' } };
 let config;
 let editorReady = false;
 let busy = false;
@@ -41,6 +42,7 @@ function updateForm() {
 
 function loadSample() {
   notes.value = config.samples.find(({ id }) => id === samples.value)?.notes ?? '';
+  inputsByMode[mode.value] = { id: samples.value, notes: notes.value };
   showError('');
   updateForm();
 }
@@ -56,11 +58,14 @@ editor.addEventListener('load', editorLoaded);
 if (editor.contentDocument?.readyState === 'complete' && editor.contentWindow.challenge) editorLoaded();
 samples.addEventListener('change', loadSample);
 notes.addEventListener('input', () => {
+  inputsByMode[mode.value].notes = notes.value;
   showError('');
   updateForm();
 });
 mode.addEventListener('change', () => {
-  if (mode.value === 'sample') loadSample();
+  const saved = inputsByMode[mode.value];
+  samples.value = saved.id;
+  notes.value = saved.notes;
   showError('');
   updateForm();
 });
@@ -72,6 +77,9 @@ element('open-editor').addEventListener('click', (event) => {
 });
 
 function renderResult({ review, evidence, proposal, source }) {
+  element('review-heading').textContent = proposal.clientName
+    ? `Adviser review · ${proposal.clientName}`
+    : 'Adviser review';
   element('review').replaceChildren(...review.map((item) => {
     const line = document.createElement('li');
     line.textContent = item;

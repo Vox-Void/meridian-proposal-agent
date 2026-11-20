@@ -33,7 +33,7 @@
           </div>
         </div>
         <label class="sr-only" for="notes">Adviser notes</label>
-        <textarea id="notes" maxlength="12000" rows="10" required placeholder="Choose a sample to load the adviser notes." readonly></textarea>
+        <textarea id="notes" maxlength="12000" rows="10" required aria-describedby="mode-help" placeholder="Choose a sample to load the adviser notes." readonly></textarea>
         <p class="hint" id="mode-help"></p>
         <button id="generate" type="submit" disabled>Generate draft</button>
         <p id="status" role="status"></p>
@@ -47,7 +47,7 @@
           <dl id="evidence"></dl>
         </details>
         <details>
-          <summary>Proposal JSON</summary>
+          <summary>Generated proposal JSON</summary>
           <pre id="proposal-json"></pre>
         </details>
       </section>

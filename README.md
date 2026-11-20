@@ -31,11 +31,13 @@ $env:ELECTRON_RUN_AS_NODE = '1'
 & "$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe" server.mjs
 ```
 
+For live mode on the same runtime, pass `--env-file=.env` before `server.mjs`.
+
 ## How it works
 
 1. The browser reads the allowed model IDs from the generator. The server limits selection to the three portfolio profiles described in the challenge.
-2. GPT-6.2 Sol returns a structured extraction containing facts, exact excerpts for key figures, and a draft model choice. The app checks that the excerpts occur in the notes and normalizes supported money and fee formats. An annual or unspecified drawdown goes to the review list because the generator's amount field is monthly.
-3. The server maps the extraction to the proposal contract and checks the fields it emits against the supplied JSON schema. It writes key figures into `strategy.keyFigures`, which the editor reads. It writes the confirmed horizon into both renderer fields and clears client horizon and target return when they are absent, even if the model has defaults.
+2. GPT-6.2 Sol returns structured facts, source excerpts and a draft model choice. The app matches excerpts back to the notes and normalizes supported money and fee formats. It requires a grounded investment currency before entering an amount. A drawdown goes to review unless the notes tie the amount to a monthly period in the same currency. The app skips a suggested portfolio when its currency conflicts with the notes.
+3. The server maps the extraction to the proposal contract and checks the types of the fields it emits against the supplied JSON schema. It writes key figures into `strategy.keyFigures`, which the editor reads. It copies a stated horizon to both renderer fields and opens a stated target return in the editor's custom field. When the notes omit these values, the proposal leaves them blank.
 4. The generator opens the editable draft. The app shows the fields that need confirmation, the source excerpts and the exact proposal JSON. Model allocation, composition and portfolio fees come from the supplied catalog. The adviser reviews model fit and any inherited defaults before using a draft.
 
 The extraction handles the core adviser-note fields. A bespoke allocation can be completed in the supplied editor. The code checks that evidence is present and parseable. Semantic questions such as whether an amount refers to the new investment or an existing holding still require adviser review.
@@ -46,10 +48,20 @@ The extraction handles the core adviser-note fields. A bespoke allocation can be
 node --test agent.test.mjs
 ```
 
-The tests cover the supplied cases, field mapping, missing and ungrounded figures, annual drawdown handling, the OpenAI request and response shape with a simulated provider, and the local HTTP API. See [the demo screenshots](demo/) for the offline sample flow in the actual generator.
+The tests cover the supplied cases, currency conflicts, ambiguous amounts, missing fields, fee and drawdown periods, malformed HTTP requests and simulated OpenAI responses. The [retiree draft](demo/01-retiree-draft.png) and [incomplete prospect draft](demo/02-sparse-draft.png) show the offline flow in the supplied renderer. In the second screenshot, the draft leaves the amount and income fields empty and the review list asks for both figures and the horizon.
 
-## With more time
+The OpenAI request reached the API, which rejected live extraction because the project's credit balance was exhausted. With an active API project, run this check to send one synthetic note through the same HTTP endpoint used by the form.
 
-I would first evaluate extraction against more synthetic notes with conflicting amounts, multiple currencies and revised instructions. I would add explicit confirm-or-correct controls for each unresolved field, then run the same validation pipeline on transcribed audio. I would preserve source excerpts through any edits so the adviser can trace where each confirmed value came from.
+```sh
+node --env-file=.env verify-live.mjs
+```
+
+## What I would change with more time
+
+I would start with a held-out set of labelled synthetic notes and run it against the live model. The four supplied examples are regression fixtures. A broader evaluation should measure whether each client figure is supported and mapped correctly, how often the agent leaves an ambiguous field blank, and how often it sends a clear field to review. I would include revised amounts, mixed currencies, one-off fees and client instructions that conflict with a portfolio preset.
+
+I would turn each review item into a question the adviser can answer in place, then apply the correction to that field and retain its source. One question I’d ask the team is whether an adviser who gives a mandate but names no model expects a provisional recommendation or wants the model field left blank. I’d also confirm how they want annual drawdowns collected, since the current editor takes a monthly amount.
+
+I would add audio transcription next and keep the transcript editable so the adviser can correct misheard names and numbers before extraction. WhatsApp would follow once we agreed on access and retention for adviser notes. The current scope covers typed notes, including pasted transcripts, and flags ambiguity for review.
 
 The original specification is in [BRIEF.md](BRIEF.md), [proposal-schema.md](proposal-schema.md) and [schema.json](schema.json).
