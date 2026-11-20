@@ -21,10 +21,10 @@
       <form id="draft-form">
         <div class="inputs">
           <div>
-            <label for="mode">Extraction mode</label>
+            <label for="mode">Mode</label>
             <select id="mode" disabled>
-              <option value="sample">Offline sample replay</option>
-              <option value="live" disabled>Live · OpenAI</option>
+              <option value="sample">Offline samples</option>
+              <option value="live" disabled>Live with OpenAI</option>
             </select>
           </div>
           <div>
@@ -33,7 +33,7 @@
           </div>
         </div>
         <label class="sr-only" for="notes">Adviser notes</label>
-        <textarea id="notes" maxlength="12000" rows="10" required aria-describedby="mode-help" placeholder="Choose a sample to load the adviser notes." readonly></textarea>
+        <textarea id="notes" maxlength="12000" rows="10" required aria-describedby="mode-help" placeholder="Choose a sample." readonly></textarea>
         <p class="hint" id="mode-help"></p>
         <button id="generate" type="submit" disabled>Generate draft</button>
         <p id="status" role="status"></p>
@@ -56,7 +56,7 @@
           <ul id="defaults"></ul>
         </details>
         <details>
-          <summary>Generated proposal JSON</summary>
+          <summary>Proposal JSON</summary>
           <pre id="proposal-json"></pre>
         </details>
       </section>
@@ -68,7 +68,7 @@
         <button id="open-editor" type="button" aria-expanded="false" hidden>Expand editor</button>
       </div>
       <div id="editor-placeholder">
-        <div><strong>No draft open</strong><p>Generate a draft from adviser notes to start reviewing it here.</p></div>
+        <p>Generate a draft to open it here.</p>
       </div>
       <iframe id="editor" title="Meridian proposal editor" src="/challenge-generator.html" hidden></iframe>
     </section>

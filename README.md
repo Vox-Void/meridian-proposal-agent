@@ -1,6 +1,6 @@
-# Meridian Proposal Agent · Grad challenge
+# Meridian Proposal Agent
 
-Turn fictional adviser notes into an editable investment proposal. The app extracts details with GPT-6.2 Sol, checks the figures against source excerpts, and opens a draft in the supplied Meridian generator through `window.loadProposal(proposal)`.
+Paste fictional adviser notes and get a draft in the Meridian proposal editor. GPT-6.2 Sol extracts the details. The app checks the figures against the notes and shows the adviser what they still need to decide.
 
 ## Run locally
 
@@ -10,17 +10,19 @@ Use Node.js 22 or newer. There are no packages to install.
 node server.mjs
 ```
 
-Open `http://127.0.0.1:8765`. In **Offline sample replay**, choose one of the four supplied samples and select **Generate draft**. This mode uses checked-in extraction fixtures and runs without a provider account. The **Incomplete prospect notes** sample shows how the app handles missing figures. The **Voice-note transcript** sample uses text input.
+Open `http://127.0.0.1:8765`. Choose **Offline samples**, pick a sample and select **Generate draft**. This uses saved results and requires no API key. Try **Incomplete prospect notes** to see which fields stay blank. The voice-note example is a text transcript.
 
 ### Live extraction
 
-Create an API key in the [OpenAI API Platform](https://platform.openai.com/api-keys) and set `OPENAI_API_KEY` in your local environment, then start or restart the server. Your ChatGPT or Codex sign-in does not set this variable for the standalone app. The API key stays on the server.
+Create an OpenAI API key and add `OPENAI_API_KEY=your_key_here` to a local `.env` file beside `server.mjs`. Git ignores this file. [Create an API key](https://platform.openai.com/api-keys)
 
-The app opens in **Live · OpenAI** when the key is present. Paste fictional notes or select a sample, then generate a draft. Live extraction sends the notes to the OpenAI Responses API.
+```sh
+node --env-file=.env server.mjs
+```
 
-The default model is `gpt-6.2-sol`. The optional `MERIDIAN_MODEL` environment variable accepts another Responses API model that supports Structured Outputs and low reasoning effort. The server uses loopback only, and `PORT` can override the default port.
+Select **Live with OpenAI** and paste fictional notes. Live mode sends the notes to the OpenAI Responses API. The key stays on the server. You can also set `OPENAI_API_KEY` in your environment and start the server without an env file.
 
-To use a local environment file, create an untracked `.env` beside `server.mjs`, add `OPENAI_API_KEY=your_key_here`, and start the server with `node --env-file=.env server.mjs`. Keep the key out of Git and screenshots.
+The default model is `gpt-6.2-sol`. Set `MERIDIAN_MODEL` to use another Responses API model that supports Structured Outputs and low reasoning effort. Set `PORT` if you need a different local port.
 
 ### Windows without a separate Node install
 
@@ -35,12 +37,11 @@ For live mode on the same runtime, pass `--env-file=.env` before `server.mjs`.
 
 ## How it works
 
-1. The browser reads the allowed model IDs from the generator. The server limits selection to the three portfolio profiles described in the challenge.
-2. GPT-6.2 Sol returns structured facts, source excerpts and a draft model choice. The app matches excerpts back to the notes and normalizes supported money and fee formats. It requires a grounded investment currency before entering an amount. A drawdown goes to review unless the notes tie the amount to a monthly period in the same currency. The app skips a suggested portfolio when its currency conflicts with the notes.
-3. The server validates the proposal against the grad pack's schema. It writes key figures into `strategy.keyFigures`, preserves the exact horizon in Goal Assessment, and maps it to a supported category in Investment Objective when possible. It maps supported risk descriptions to a dropdown category and puts a stated target return in the editor's custom field.
-4. The generator opens the editable draft. The review panel shows the questions to resolve, excerpts from the notes, the draft portfolio and dropdown choices, and which defaults the tool can supply. When the notes name only a benchmark class, the panel asks for the specific index and the benchmark field stays open.
+1. The browser gets the available portfolio IDs from the editor. The server offers the three portfolios supplied with the challenge.
+2. GPT-6.2 Sol returns proposal details and quotes from the notes. The app checks the quotes before it enters figures. A drawdown needs a clear monthly amount in the same currency as the investment.
+3. The server checks the draft against the grad pack's schema. The browser opens it with `window.loadProposal(...)`. The adviser can check the notes, proposed choices and defaults alongside the editable draft.
 
-The extraction handles the core adviser-note fields. A bespoke allocation can be completed in the supplied editor. The code checks that evidence is present and parseable. Semantic questions such as whether an amount refers to the new investment or an existing holding still require adviser review.
+The quote checks confirm that a figure appears in the notes. The adviser still needs to check what it refers to, such as the new investment amount or an existing holding.
 
 ## Verification
 
@@ -48,9 +49,9 @@ The extraction handles the core adviser-note fields. A bespoke allocation can be
 node --test agent.test.mjs
 ```
 
-The tests cover the grad examples, the horizon and risk dropdowns, currency conflicts, ambiguous amounts, fee and drawdown periods, malformed HTTP requests and simulated OpenAI responses. The [retiree draft](demo/01-retiree-draft.png), [incomplete prospect draft](demo/02-sparse-draft.png) and [investment objective](demo/03-grad-objective.png) show the offline flow in the supplied renderer.
+These tests use the grad examples and a new fictional case. They cover figures, dropdown values, request handling and simulated OpenAI responses. See the [retiree draft](demo/01-retiree-draft.png), [incomplete prospect draft](demo/02-sparse-draft.png) and [investment objective](demo/03-grad-objective.png) for the offline demo.
 
-The OpenAI request reached the API, which rejected live extraction because the project's credit balance was exhausted. With an active API project, run this check to send one synthetic note through the same HTTP endpoint used by the form.
+Live generation needs an OpenAI project with API credits. This check sends a fictional note through the same endpoint the browser uses.
 
 ```sh
 node --env-file=.env verify-live.mjs
@@ -58,19 +59,18 @@ node --env-file=.env verify-live.mjs
 
 ## Design decisions and assumptions
 
-I kept the supplied editor because the expensive step is moving facts out of the meeting notes. Portfolio managers can keep their existing review, editing and export workflow. The notes form, extraction and review panel sit alongside the editor and use its existing import function.
+I kept the existing editor because the time-consuming step is getting the meeting notes into the proposal. The adviser can review, edit and export the draft in the tool they already use.
 
-- A portfolio initiated by the agent is a draft choice for the adviser to approve. Its allocation, composition and portfolio fees come from the catalog.
-- The horizon dropdown represents a minimum. For a range such as `3 to 6 years`, the editor uses `3 years+` and Goal Assessment retains the full range. An upper-bound-only duration or a minimum below one year goes to review.
-- Risk categories are mapped from supported descriptions in the notes. Unclear labels stay open. The review panel shows the source phrase and the proposed category in separate sections.
-- A stated benchmark class or an unstated mandate calls for a decision from the adviser. The draft preserves the class as a source excerpt and asks which index to use.
+- The adviser approves the portfolio. Its allocation, composition and portfolio fees come from the catalog. If its currency conflicts with the notes, the app asks the adviser to choose a portfolio.
+- The horizon dropdown uses a minimum. For `3 to 6 years`, it shows `3 years+` and keeps the full range in Goal Assessment. A horizon such as `up to 5 years` goes to review because it gives only an upper limit.
+- The app fills a risk category when the notes support one and shows the source phrase. It asks for the mandate if the notes leave it open. A phrase such as “global equity index” prompts the adviser to name the index.
 
 ## What I would change with more time
 
-I would start with a held-out set of labelled synthetic notes and run it against the live model. The four supplied examples are regression fixtures. A broader evaluation should measure whether each client figure is supported and mapped correctly, how often the agent leaves an ambiguous field blank, and how often it sends a clear field to review. I would include revised amounts, mixed currencies, one-off fees and client instructions that conflict with a portfolio preset.
+I would test the live model on a separate set of fictional notes covering revised amounts, mixed currencies and one-off fees. I would count correct fields, unsupported figures and unnecessary questions.
 
-The first change I would make to the tool is to attach source and review status directly to each populated field. An adviser could answer a question next to the field, accept a proposed value, or replace it while retaining its source. I would also replace the fixed horizon dropdown with separate fields for the client's stated horizon and the portfolio's recommended minimum, since those represent different decisions. I would ask the team how they want to collect annual drawdowns and when a provisional model is useful.
+In the editor, I would show each source quote next to its field and let the adviser answer a question there. I would give the client's stated horizon and the portfolio's recommended minimum separate fields. I would ask the team how they handle annual drawdowns and when they want the app to suggest a portfolio.
 
-I would add audio transcription next and keep the transcript editable so the adviser can correct misheard names and numbers before extraction. A conversational workflow could then use the same review questions to fill the draft one decision at a time. The current scope covers typed notes and pasted transcripts.
+For audio, I would let the adviser correct the transcript before generating a draft. The same review questions could then guide a conversation with the adviser.
 
 The grad pack's specification is in [BRIEF.md](BRIEF.md), [proposal-schema.md](proposal-schema.md) and [schema.json](schema.json).

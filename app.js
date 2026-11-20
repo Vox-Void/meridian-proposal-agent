@@ -30,14 +30,14 @@ function updateForm() {
   samples.disabled = busy || !config;
   generate.disabled = busy || !editorReady || !config || !notes.value.trim() || (!live && !samples.value);
   const chip = element('mode-chip');
-  chip.textContent = live ? 'Live · OpenAI' : 'Offline sample replay';
+  chip.textContent = live ? 'Live with OpenAI' : 'Offline samples';
   chip.hidden = !config;
   element('mode-help').textContent = live
-    ? 'Use fictional notes. Live extraction sends the notes to OpenAI.'
+    ? 'Live mode sends your notes to OpenAI. Use fictional notes.'
     : config?.live
-      ? 'Offline replay uses recorded sample extractions.'
-      : 'Offline replay uses recorded samples. Set OPENAI_API_KEY on the server for custom notes.';
-  notes.placeholder = live ? 'Paste fictional adviser notes here.' : 'Choose a sample to load the adviser notes.';
+      ? 'Offline mode uses saved results for the sample notes.'
+      : 'Set OPENAI_API_KEY to use your own fictional notes. The samples work offline.';
+  notes.placeholder = live ? 'Paste fictional adviser notes.' : 'Choose a sample.';
 }
 
 function loadSample() {
@@ -98,7 +98,7 @@ function renderDetails(panel, list, entries) {
 
 function renderResult({ review, evidence, draftChoices, defaults, proposal, source }) {
   element('review-heading').textContent = proposal.clientName
-    ? `Adviser review · ${proposal.clientName}`
+    ? `Review for ${proposal.clientName}`
     : 'Adviser review';
   element('review').replaceChildren(...listItems(review));
   element('defaults').replaceChildren(...listItems(defaults));
@@ -109,7 +109,9 @@ function renderResult({ review, evidence, draftChoices, defaults, proposal, sour
   element('editor-placeholder').hidden = true;
   element('open-editor').hidden = false;
   element('editor-state').textContent = 'Draft open';
-  element('status').textContent = `Draft opened · ${source}`;
+  element('status').textContent = source === 'Offline sample replay'
+    ? 'Draft opened from a sample.'
+    : `Draft opened using ${source}.`;
 }
 
 form.addEventListener('submit', async (event) => {
@@ -118,7 +120,7 @@ form.addEventListener('submit', async (event) => {
   busy = true;
   updateForm();
   showError('');
-  element('status').textContent = 'Preparing draft…';
+  element('status').textContent = 'Preparing draft...';
   try {
     const modelIds = editor.contentWindow.challenge.models().map(({ id }) => id);
     const result = await getJson('/api/proposal', {
@@ -127,7 +129,7 @@ form.addEventListener('submit', async (event) => {
       body: JSON.stringify({ mode: mode.value, sampleId: samples.value, notes: notes.value, modelIds }),
     });
     editor.hidden = false;
-    // Omit unset enums in the API contract, but explicitly clear the vendor editor's presets.
+    // The editor applies model defaults before it reads the draft. Empty strings clear these two dropdowns.
     const proposal = result.proposal;
     editor.contentWindow.loadProposal({
       ...proposal,

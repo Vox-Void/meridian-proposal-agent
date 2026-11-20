@@ -116,8 +116,7 @@ main.editor-expanded .workspace { display: none; }
   padding: 24px;
   color: var(--muted);
 }
-#editor-placeholder strong { color: #1d2c3c; }
-#editor-placeholder p { margin: 7px 0 0; font-size: 14px; }
+#editor-placeholder p { margin: 0; font-size: 14px; }
 iframe { display: block; width: 100%; height: max(670px, calc(100dvh - 163px)); border: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 

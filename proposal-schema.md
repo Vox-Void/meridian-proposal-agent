@@ -1,4 +1,4 @@
-# Proposal tool — data reference
+# Proposal tool data reference
 
 This describes the data the tool understands **today**. It's a reference, not a
 set of rules: you're free to use it as-is, extend it, or change the tool.

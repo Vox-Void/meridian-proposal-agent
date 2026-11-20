@@ -8,7 +8,7 @@ import { makeServer } from './server.mjs';
 
 const models = Object.entries(modelProfiles).map(([id, profile]) => ({ id, ...profile }));
 
-test('all provided samples carry the expected client, model, currency and grounded figures', () => {
+test('the supplied samples match the expected client, model and figures', () => {
   for (const [index, { extraction, notes }] of demos.entries()) {
     const { proposal, evidence, draftChoices, defaults, review } = buildProposal(extraction, notes, models);
     const fixture = new URL(`./sample-inputs/0${index + 1}-expected.json`, import.meta.url);
@@ -35,7 +35,7 @@ test('all provided samples carry the expected client, model, currency and ground
       assert.equal(proposal.objective.benchmark, '');
       assert.equal(evidence.Benchmark, 'global equity index');
       assert.equal(proposal.goalAssessment.mandateType, undefined);
-      assert.match(review.join(' '), /Confirm the mandate type.*specific benchmark/);
+      assert.match(review.join(' '), /Confirm the mandate type.*Which index/);
       assert.equal(proposal.strategy.keyFigures.incomeValue, '0');
     }
     if (index === 2) {
@@ -71,7 +71,7 @@ test('normalizes written numbers and preserves decimal precision', () => {
     '10 000.42': '10000.42', 'four and a half million rand': '4500000',
     '0.0000007 million': '0.7', '0.00001m': '10', 'zero point seven five': '0.75',
     'two hundred and fifty thousand': '250000', 'one point two million rand': '1200000',
-    'two million one hundred thousand and ten': '2100010', 'a few million': '', 'R5m–R6m': '',
+    'two million one hundred thousand and ten': '2100010', 'a few million': '', 'R5m-R6m': '',
     'one two thousand': '', 'five thousand two million': '', 'twenty zero': '', 'and': '',
   })) assert.equal(normalizedNumber(source), expected, source);
   assert.equal(normalizedNumber('R1', true), '');
@@ -79,7 +79,7 @@ test('normalizes written numbers and preserves decimal precision', () => {
 });
 
 test('rejects partial investment amounts and endpoints of a range', () => {
-  const notes = 'ZAR. They may invest R6.2 million, between R200k and R300k, or R5m–R6m. Existing balance −R800. Indicative R1 234.';
+  const notes = 'ZAR. They may invest R6.2 million, between R200k and R300k, or R5m\u2013R6m. Existing balance −R800. Indicative R1 234.';
   for (const amountQuote of ['R6', 'R6.2', '2 million', 'R5m', 'R6m', 'R200k', 'R300k', 'R800', 'R1', '234']) {
     const draft = buildProposal({ amountQuote, currencyQuote: 'ZAR' }, notes, models);
     assert.equal(draft.proposal.strategy.keyFigures.totalInvestment, undefined, amountQuote);
@@ -87,7 +87,7 @@ test('rejects partial investment amounts and endpoints of a range', () => {
   assert.equal(buildProposal({ amountQuote: 'R1 234' }, notes, models).proposal.strategy.keyFigures.totalInvestment, '1234');
 });
 
-test('keeps a confirmed investment but does not mix a foreign drawdown and an incompatible model', () => {
+test('keeps a confirmed investment and flags conflicting currencies', () => {
   const notes = 'Invest USD 1.2m. Monthly drawdown of R25,000. Consider Meridian Balanced Portfolio.';
   const { proposal, review } = buildProposal({
     amountQuote: 'USD 1.2m', incomeQuote: 'R25,000', incomeBasis: 'monthly',
@@ -142,7 +142,7 @@ test('maps the lower bound of a horizon range and treats an upper bound as unres
   assert.equal(upperBound.proposal.objective.investmentHorizon, undefined);
 });
 
-test('keeps uncertain risk categories and mandates open, while retaining a quoted named benchmark', () => {
+test('keeps a named benchmark when risk and mandate are uncertain', () => {
   const notes = 'They do not want an aggressive portfolio. Maybe Discretionary. Benchmark against the MSCI World Index.';
   const { proposal, review } = buildProposal({
     riskQuote: 'aggressive', mandateQuote: 'Discretionary', benchmark: 'MSCI World Index',
@@ -153,7 +153,7 @@ test('keeps uncertain risk categories and mandates open, while retaining a quote
   assert.match(review.join(' '), /risk category.*mandate type/);
 });
 
-test('does not label basis-point, monthly or one-off charges as the annual adviser fee', () => {
+test('leaves the annual adviser fee blank for other types of charge', () => {
   for (const [notes, feeQuote] of [
     ['Adviser fee 75 bps.', '75'],
     ['Adviser fee 0.75% per month.', '0.75%'],
@@ -227,13 +227,30 @@ test('OpenAI adapter sends the current model list and consumes the structured re
   await assert.rejects(extractWithOpenAI(fixture.notes, models), { message: /rate-limiting/, status: 429 });
 });
 
-test('HTTP workflow accepts new notes in live mode and rejects a modified offline sample', async (context) => {
+test('the proposal endpoint builds a draft from new notes and keeps offline replay limited to the samples', async (context) => {
+  const newNotes = [
+    'Avery Vale wants to invest GBP 325,000. Monthly income of £850.',
+    'Horizon 36\u201460 months. Risk tolerance is moderately conservative.',
+    'Self-directed. Benchmark against the FTSE 100 Index. Annual adviser fee 0.55%.',
+  ].join(' ');
   const server = makeServer({
     extract: async (notes, available) => {
+      assert.equal(notes, newNotes);
       assert.deepEqual(available.map(({ id }) => id), ['balanced']);
       return {
-        extraction: { clientName: 'Alex Demo', amountQuote: '£25,000', horizonQuote: '8 years' },
-        model: 'test-provider',
+        extraction: {
+          clientName: 'Avery Vale',
+          amountQuote: 'GBP 325,000',
+          incomeQuote: '£850',
+          incomeBasis: 'monthly',
+          incomePeriodQuote: 'Monthly income of £850',
+          horizonQuote: '36\u201460 months',
+          riskQuote: 'moderately conservative',
+          mandateQuote: 'Self-directed',
+          benchmark: 'FTSE 100 Index',
+          feeQuote: '0.55%',
+        },
+        model: 'Simulated OpenAI',
       };
     },
   });
@@ -246,12 +263,20 @@ test('HTTP workflow accepts new notes in live mode and rejects a modified offlin
       body: JSON.stringify({ modelIds: ['balanced', 'unavailable-model'], ...payload }),
     });
   }
-  const live = await request({ mode: 'live', notes: 'Alex Demo has £25,000 to invest over 8 years.' });
+  const live = await request({ mode: 'live', notes: newNotes });
   assert.equal(live.status, 200);
   const result = await live.json();
-  assert.equal(result.proposal.strategy.keyFigures.totalInvestment, '25000');
+  assert.equal(result.proposal.clientName, 'Avery Vale');
+  assert.equal(result.proposal.strategy.currency, 'GBP');
+  assert.deepEqual(result.proposal.strategy.keyFigures, { totalInvestment: '325000', incomeValue: '850' });
+  assert.equal(result.proposal.goalAssessment.investmentHorizon, '36\u201460 months');
+  assert.equal(result.proposal.goalAssessment.mandateType, 'Self-directed');
+  assert.equal(result.proposal.objective.investmentHorizon, '3 years+');
+  assert.equal(result.proposal.objective.riskProfileCategory, 'Moderately Conservative');
+  assert.equal(result.proposal.objective.benchmark, 'FTSE 100 Index');
+  assert.equal(result.proposal.fees.advisorFee, '0.55');
   assert.equal(result.proposal.applyModel, undefined);
-  assert.equal(result.source, 'test-provider');
+  assert.equal(result.source, 'Simulated OpenAI');
   const replay = await request({ mode: 'sample', sampleId: 'income', notes: demos[0].notes });
   assert.equal(replay.status, 200);
   assert.equal((await replay.json()).proposal.applyModel, undefined);

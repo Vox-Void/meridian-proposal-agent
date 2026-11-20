@@ -55,6 +55,7 @@ function spokenInteger(words) {
 
 function scaleDecimal(plain, scale) {
   const [whole, decimal = ''] = plain.split('.');
+  // Multiply the digits as an integer so currency amounts keep their decimal places.
   const product = BigInt(whole + decimal) * BigInt(scale);
   if (!decimal) return String(product);
   const places = decimal.length;
@@ -63,10 +64,10 @@ function scaleDecimal(plain, scale) {
   return padded.slice(0, -places) + (fractional ? `.${fractional}` : '');
 }
 
-export function normalizedNumber(quote, isFee = false) {
+export function normalizedNumber(quote, isPercent = false) {
   const value = quote.toLowerCase().trim().replace(/\s+/g, ' ')
     .replace(/^(?:about|approximately|around|roughly)\s+/, '');
-  const clean = (isFee
+  const clean = (isPercent
     ? value.replace(/\s*(?:percent|per cent|%)$/, '')
     : value
       .replace(/^(?:(?:zar|usd|gbp|eur|rand|us dollars?|euros?|pounds? sterling)\b|us\$|r(?=\s*\d)|\$|£|€)\s*/, '')
@@ -77,12 +78,12 @@ export function normalizedNumber(quote, isFee = false) {
     const [, whole, decimal = '', suffix] = digits;
     const plain = whole.replace(/[ ,]/g, '').replace(/^0+(?=\d)/, '') + decimal;
     if (!suffix) return plain;
-    if (isFee) return '';
+    if (isPercent) return '';
     return scaleDecimal(plain, { ...scales, k: 1000, m: 1_000_000, bn: 1_000_000_000 }[suffix]);
   }
-  if (clean === 'a' || (isFee && /\b(?:thousand|million|billion)\b/.test(clean))) return '';
+  if (clean === 'a' || (isPercent && /\b(?:thousand|million|billion)\b/.test(clean))) return '';
   const half = clean.match(/^(.+?) and a half (thousand|million|billion)$/);
-  if (half && !isFee) {
+  if (half && !isPercent) {
     const whole = underThousand(half[1]);
     return Number.isFinite(whole) ? scaleDecimal(`${whole}.5`, scales[half[2]]) : '';
   }
